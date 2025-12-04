@@ -44,8 +44,6 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
     for (uint64_t i = 0; i < img_size; ++i) {
         for (uint64_t j = 0; j < img_size; j += 16) {
             // Get the plane coordinate X for the image pixel.
-            // float cx = (float(j) / float(img_size)) * 2.5f - 2.0f;
-            // float cy = (float(i) / float(img_size)) * 2.5f - 1.25f;
             __m512 cx = _mm512_div_ps(_mm512_set_ps(
                 float(j + 15), float(j + 14), float(j + 13), float(j + 12),
                 float(j + 11), float(j + 10), float(j + 9), float(j + 8),
@@ -65,15 +63,7 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
             __mmask16 mask = _mm512_cmp_ps_mask(_mm512_set1_ps(0.0f), _mm512_set1_ps(0.0f), _CMP_TRUE_UQ);
             __m512i iters = _mm512_set1_epi32(0);
             uint32_t iter_count = 0;
-            // while (x2 + y2 <= 4.0f && iters < max_iters) {
-            //     float x = x2 - y2 + cx;
-            //     float y = w - x2 - y2 + cy;
-            //     x2 = x * x;
-            //     y2 = y * y;
-            //     float z = x + y;
-            //     w = z * z;
-            //     ++iters;
-            // }
+
             while ((uint16_t)mask > 0 && iter_count < max_iters) {
                 __m512 x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
                 __m512 y =_mm512_add_ps(_mm512_sub_ps(_mm512_sub_ps(w, x2), y2), cy);
@@ -88,7 +78,6 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
             }
 
             // Write result.
-            // out[i * img_size + j] = iters;
             _mm512_storeu_si512(&out[i * img_size + j], iters);
         }
     }
