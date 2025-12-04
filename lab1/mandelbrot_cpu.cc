@@ -46,12 +46,12 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
             // Get the plane coordinate X for the image pixel.
             // float cx = (float(j) / float(img_size)) * 2.5f - 2.0f;
             // float cy = (float(i) / float(img_size)) * 2.5f - 1.25f;
-            __m512 cx = _mm512_set_ps(
+            __m512 cx = _mm512_div_ps(_mm512_set_ps(
                 float(j + 15), float(j + 14), float(j + 13), float(j + 12),
                 float(j + 11), float(j + 10), float(j + 9), float(j + 8),
                 float(j + 7), float(j + 6), float(j + 5), float(j + 4),
                 float(j + 3), float(j + 2), float(j + 1), float(j)
-            );
+            ), _mm512_set1_ps((float)img_size));
             __m512 mul_vec = _mm512_set1_ps(2.5f);
             __m512 sub_vec = _mm512_set1_ps(2.0f);
             cx = _mm512_sub_ps(_mm512_mul_ps(cx, mul_vec), sub_vec);
