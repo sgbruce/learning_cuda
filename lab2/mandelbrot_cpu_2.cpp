@@ -107,10 +107,10 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
 
 void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *out) {
     for (uint64_t i = 0; i < img_size; i += NUM_UNROLL) {
-        for (uint64_t b = 0; b < img_size; b += 16) {
+        for (uint64_t j = 0; j < img_size; j += 16) {
             #pragma unroll
             for(uint32_t k = 0; k < NUM_UNROLL; ++k) {
-                uint64_t j = b + k;
+                uint64_t a = i + k;
                 // Get the plane coordinate X for the image pixel.
                 __m512 cx = _mm512_div_ps(_mm512_set_ps(
                     float(j + 15), float(j + 14), float(j + 13), float(j + 12),
@@ -122,7 +122,7 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                 __m512 add_vec = _mm512_set1_ps(window_x);
                 cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
 
-                __m512 cy = _mm512_set1_ps((float(i) / float(img_size)) * window_zoom + window_y);
+                __m512 cy = _mm512_set1_ps((float(a) / float(img_size)) * window_zoom + window_y);
 
                 // Innermost loop: start the recursion from z = 0.
                 __m512 x2 = _mm512_set1_ps(0.0f);
@@ -146,7 +146,7 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                 }
 
                 // Write result.
-                _mm512_storeu_si512(&out[i * img_size + j], iters);
+                _mm512_storeu_si512(&out[a * img_size + j], iters);
             }
         }
     }
