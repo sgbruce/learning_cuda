@@ -31,7 +31,12 @@ fma_latency(data_type *n, unsigned long long *d_start, unsigned long long *d_end
     __threadfence();
     start_time = clock_cycle();
 
-    /// <--- /your code here --->
+    float a = 0.0f;
+    float b = 0.2f;
+    a = (a * b) + 1.0f;
+    a = (a * b) + 1.0f;
+    a = (a * b) + 1.0f;
+    x = a;
 
     end_time = clock_cycle();
 
@@ -57,7 +62,12 @@ __global__ void fma_latency_interleaved(
 
     start_time = clock_cycle();
 
-    /// <--- /your code here --->
+    float a = 0.0f;
+    float b = 0.2f;
+    float d = (a * b) + 1.0f;
+    float e = (a * b) + 3.0f;
+    float f = (a * b) + 2.0f;
+    x = d + e + f;
 
     end_time = clock_cycle();
 
