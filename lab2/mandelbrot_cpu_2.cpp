@@ -60,7 +60,7 @@ uint32_t ceil_div(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
 // Vector
 
 void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out) {
-    for (uint64_t i = 0; i < img_size; i += NUM_UNROLL) {
+    for (uint64_t i = 0; i < img_size; ++i) {
         for (uint64_t j = 0; j < img_size; j += 16) {
             // Get the plane coordinate X for the image pixel.
             __m512 cx = _mm512_div_ps(_mm512_set_ps(
