@@ -77,24 +77,24 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
             cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
 
             // Innermost loop: start the recursion from z = 0.
+            __m512 x = _mm512_set1_ps(0.0f);
+            __m512 y = _mm512_set1_ps(0.0f);
             __m512 x2 = _mm512_set1_ps(0.0f);
             __m512 y2 = _mm512_set1_ps(0.0f);
-            __m512 w = _mm512_set1_ps(0.0f);
             __mmask16 mask = 0xFFFF;
             __m512i iters = _mm512_set1_epi32(0);
             uint32_t iter_count = 0;
 
             while ((uint16_t)mask > 0 && iter_count < max_iters) {
-                __m512 x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
-                __m512 y =_mm512_add_ps(_mm512_sub_ps(w, _mm512_add_ps(x2, y2)), cy);
                 x2 = _mm512_mul_ps(x, x);
-                y2 = _mm512_mul_ps(y, y);
-                __m512 z = _mm512_add_ps(x, y);
-                w = _mm512_mul_ps(z, z);
-                iters = _mm512_mask_add_epi32(iters, mask, iters, _mm512_set1_epi32(1));
+                y2 = _mm512_mul_ps(y2, y);
+                y =_mm512_fmadd_ps(_mm512_add_ps(x, x), y, cy);
+                x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
+                __m512 z = _mm512_add_ps(x2, y2);
+                iters = _mm512_mask_add_epi32(iters, mask, iters, one_vec);
 
                 ++iter_count;
-                mask = _mm512_cmp_ps_mask(_mm512_add_ps(x2, y2), _mm512_set1_ps(4.0f), _CMP_LE_OQ);
+                mask = _mm512_cmp_ps_mask(_mm512_add_ps(x2, y2), four_vec, _CMP_LE_OQ);
             }
 
             // Write result.
