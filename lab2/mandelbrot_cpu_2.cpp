@@ -60,26 +60,27 @@ uint32_t ceil_div(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
 // Vector
 
 void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out) {
+    float cx_arr[img_size];
+    for(uint32_t i = 0; i < img_size; ++i) {
+        cx_arr[i] = float(i) / float(img_size);
+    }
+    __m512 mul_vec = _mm512_set1_ps(window_zoom);
+    __m512 add_vec = _mm512_set1_ps(window_x);
+    __m512i one_vec = _mm512_set1_epi32(1);
+    __m512 four_vec = _mm512_set1_ps(4.0f);
+
     for (uint64_t i = 0; i < img_size; ++i) {
+        __m512 cy = _mm512_set1_ps((float(i) / float(img_size)) * window_zoom + window_y);
         for (uint64_t j = 0; j < img_size; j += 16) {
             // Get the plane coordinate X for the image pixel.
-            __m512 cx = _mm512_div_ps(_mm512_set_ps(
-                float(j + 15), float(j + 14), float(j + 13), float(j + 12),
-                float(j + 11), float(j + 10), float(j + 9), float(j + 8),
-                float(j + 7), float(j + 6), float(j + 5), float(j + 4),
-                float(j + 3), float(j + 2), float(j + 1), float(j)
-            ), _mm512_set1_ps((float)img_size));
-            __m512 mul_vec = _mm512_set1_ps(window_zoom);
-            __m512 add_vec = _mm512_set1_ps(window_x);
+            __m512 cx = _mm512_loadu_ps(&cx_arr[j]);
             cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
-
-            __m512 cy = _mm512_set1_ps((float(i) / float(img_size)) * window_zoom + window_y);
 
             // Innermost loop: start the recursion from z = 0.
             __m512 x2 = _mm512_set1_ps(0.0f);
             __m512 y2 = _mm512_set1_ps(0.0f);
             __m512 w = _mm512_set1_ps(0.0f);
-            __mmask16 mask = _mm512_cmp_ps_mask(_mm512_set1_ps(0.0f), _mm512_set1_ps(0.0f), _CMP_TRUE_UQ);
+            __mmask16 mask = 0xFFFF;
             __m512i iters = _mm512_set1_epi32(0);
             uint32_t iter_count = 0;
 
