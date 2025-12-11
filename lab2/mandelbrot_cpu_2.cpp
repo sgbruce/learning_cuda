@@ -91,10 +91,10 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
                 y = _mm512_fmadd_ps(_mm512_add_ps(x, x), y, cy);
                 x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
 
+                mask = _mm512_cmp_ps_mask(_mm512_add_ps(x2, y2), four_vec, _CMP_LE_OQ);
                 iters = _mm512_mask_add_epi32(iters, mask, iters, one_vec);
 
                 ++iter_count;
-                mask = _mm512_cmp_ps_mask(_mm512_add_ps(x2, y2), four_vec, _CMP_LE_OQ);
             }
 
             // Write result.
