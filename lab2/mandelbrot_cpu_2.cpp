@@ -70,12 +70,11 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
     __m512 four_vec = _mm512_set1_ps(4.0f);
 
     for (uint64_t i = 0; i < img_size; ++i) {
+        __m512 cy = _mm512_set1_ps((float(i) / float(img_size)) * window_zoom + window_y);
         for (uint64_t j = 0; j < img_size; j += 16) {
             // Get the plane coordinate X for the image pixel.
             __m512 cx = _mm512_loadu_ps(&cx_arr[j]);
             cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
-
-            __m512 cy = _mm512_set1_ps((float(i) / float(img_size)) * window_zoom + window_y);
 
             // Innermost loop: start the recursion from z = 0.
             __m512 x2 = _mm512_set1_ps(0.0f);
