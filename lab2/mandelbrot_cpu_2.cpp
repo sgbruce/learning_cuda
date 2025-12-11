@@ -157,6 +157,9 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                         x[v] = new_x;
                         y[v] = new_y;
 
+                        new_x2 = _mm512_mul_ps(x[v], x[v]);
+                        new_y2 = _mm512_mul_ps(y[v], y[v]);
+
                         // compute magnitude^2 = x2 + y2 once
                         __m512 mag2 = _mm512_add_ps(new_x2, new_y2);
 
