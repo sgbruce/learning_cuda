@@ -122,36 +122,68 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
             // Get the plane coordinate X for the image pixel.
             __m512 cx = _mm512_loadu_ps(&cx_arr[j]);
             cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
-            #pragma unroll
-            for(uint32_t k = 0; k < NUM_UNROLL; ++k) {
-                
-                uint64_t a = i + k;
-                __m512 cy = _mm512_set1_ps(cy_arr[a]);
+            // #pragma unroll
+            // for(uint32_t k = 0; k < NUM_UNROLL; ++k) {
 
-                // Innermost loop: start the recursion from z = 0.
-                __m512 x2 = _mm512_set1_ps(0.0f);
-                __m512 y2 = _mm512_set1_ps(0.0f);
-                __m512 w = _mm512_set1_ps(0.0f);
-                __mmask16 mask = _mm512_cmp_ps_mask(_mm512_set1_ps(0.0f), _mm512_set1_ps(0.0f), _CMP_TRUE_UQ);
-                __m512i iters = _mm512_set1_epi32(0);
-                uint32_t iter_count = 0;
+                // For each independent vector (different rows), load cy from table and init x,y,x2,y2,iters,alive mask
+                __m512 x[NUM_UNROLL], y[NUM_UNROLL];
+                __m512 x2[NUM_UNROLL], y2[NUM_UNROLL];
+                __m512i iters[NUM_UNROLL];
+                __mmask16 alive_mask[NUM_UNROLL];
 
-                while ((uint16_t)mask > 0 && iter_count < max_iters) {
-                    __m512 x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
-                    __m512 y =_mm512_add_ps(_mm512_sub_ps(w, _mm512_add_ps(x2, y2)), cy);
-                    x2 = _mm512_mul_ps(x, x);
-                    y2 = _mm512_mul_ps(y, y);
-                    __m512 z = _mm512_add_ps(x, y);
-                    w = _mm512_mul_ps(z, z);
-                    iters = _mm512_mask_add_epi32(iters, mask, iters, one_vec);
-
-                    ++iter_count;
-                    mask = _mm512_cmp_ps_mask(_mm512_add_ps(x2, y2), four_vec, _CMP_LE_OQ);
+                for (int v = 0; v < NUM_UNROLL; ++v) {
+                    x[v] = _mm512_set1_ps(0.0f);
+                    y[v] = _mm512_set1_ps(0.0f);
+                    x2[v] = _mm512_set1_ps(0.0f);
+                    y2[v] = _mm512_set1_ps(0.0f);
+                    iters[v] = _mm512_set1_epi32(0);
+                    alive_mask[v] = 0xFFFF; // all lanes start alive
                 }
 
-                // Write result.
-                _mm512_storeu_si512(&out[a * img_size + j], iters);
-            }
+                // Fixed-iteration loop so control flow is predictable
+                for (uint32_t it = 0; it < max_iters; ++it) {
+                    bool any_alive = false;
+                    for (int v = 0; v < NUM_UNROLL; ++v) {
+                        if (!alive_mask[v]) continue; // skip fully dead vectors quickly
+
+                        // x' = x*x - y*y + cx
+                        // y' = 2*x*y + cy  -> use fmadd for 2*x*y + cy
+
+                        __m512 xy = _mm512_mul_ps(x[v], y[v]);            // x*y
+                        __m512 new_x2 = _mm512_mul_ps(x[v], x[v]);       // x^2
+                        __m512 new_y2 = _mm512_mul_ps(y[v], y[v]);       // y^2
+
+                        // compute new x and y
+                        __m512 new_x = _mm512_add_ps(_mm512_sub_ps(new_x2, new_y2), cx);
+                        __m512 new_y = _mm512_fmadd_ps(_mm512_add_ps(xy, xy), _mm512_set1_ps(1.0f), _mm512_set1_ps(cy_arr[i + v]));
+                        // note: _mm512_fmadd_ps(2*xy, 1.0, cy) — here we used (xy+xy)
+
+                        x[v] = new_x;
+                        y[v] = new_y;
+                        x2[v] = new_x2;
+                        y2[v] = new_y2;
+
+                        // compute magnitude^2 = x2 + y2 once
+                        __m512 mag2 = _mm512_add_ps(new_x2, new_y2);
+
+                        // update alive mask for this vector
+                        __mmask16 still_alive = _mm512_cmp_ps_mask(mag2, _mm512_set1_ps(4.0f), _CMP_LE_OQ);
+                        alive_mask[v] = still_alive;
+
+                        // increment iters only on active lanes
+                        iters[v] = _mm512_mask_add_epi32(iters[v], still_alive, iters[v], one_vec);
+
+                        if (still_alive) any_alive = true;
+                    }
+                    if (!any_alive) break; // early out if no lane in any vector needs more iterations
+                } // end iter loop
+
+                // store results for each v into output (store 16 ints per vector)
+                for (int v = 0; v < NUM_UNROLL; ++v) {
+                    // convert iters[v] (vec of 16 int32) into memory
+                    _mm512_storeu_si512((void*)(&out[(i+v)*img_size + j]), iters[v]);
+                }
+            // }
         }
     }
 }
