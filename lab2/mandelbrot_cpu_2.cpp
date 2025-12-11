@@ -160,7 +160,7 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                     __m512 mag2 = _mm512_add_ps(new_x2, new_y2);
 
                     // update alive mask for this vector
-                    __mmask16 still_alive = _mm512_cmp_ps_mask(mag2, _mm512_set1_ps(4.0f), _CMP_LE_OQ);
+                    __mmask16 still_alive = _mm512_cmp_ps_mask(mag2, four_vec, _CMP_LE_OQ);
                     alive_mask[v] = still_alive;
 
                     // increment iters only on active lanes
