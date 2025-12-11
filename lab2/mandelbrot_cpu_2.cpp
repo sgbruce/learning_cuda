@@ -80,7 +80,7 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
             __m512 x2 = _mm512_set1_ps(0.0f);
             __m512 y2 = _mm512_set1_ps(0.0f);
             __m512 w = _mm512_set1_ps(0.0f);
-            __mmask16 mask = _mm512_cmp_ps_mask(_mm512_set1_ps(0.0f), _mm512_set1_ps(0.0f), _CMP_TRUE_UQ);
+            __mmask16 mask = 0xFFFF;
             __m512i iters = _mm512_set1_epi32(0);
             uint32_t iter_count = 0;
 
