@@ -120,7 +120,7 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
     for (uint64_t i = 0; i < img_size; i += NUM_UNROLL) {
         for (uint64_t j = 0; j < img_size; j += 16) {
             // Get the plane coordinate X for the image pixel.
-            __m512 cx = _mm512_loadu_ps(&cx[j]);
+            __m512 cx = _mm512_loadu_ps(&cx_arr[j]);
             cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
             #pragma unroll
             for(uint32_t k = 0; k < NUM_UNROLL; ++k) {
