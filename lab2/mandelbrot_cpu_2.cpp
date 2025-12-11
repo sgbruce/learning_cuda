@@ -127,15 +127,12 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
 
                 // For each independent vector (different rows), load cy from table and init x,y,x2,y2,iters,alive mask
                 __m512 x[NUM_UNROLL], y[NUM_UNROLL];
-                __m512 x2[NUM_UNROLL], y2[NUM_UNROLL];
                 __m512i iters[NUM_UNROLL];
                 __mmask16 alive_mask[NUM_UNROLL];
 
                 for (int v = 0; v < NUM_UNROLL; ++v) {
                     x[v] = _mm512_set1_ps(0.0f);
                     y[v] = _mm512_set1_ps(0.0f);
-                    x2[v] = _mm512_set1_ps(0.0f);
-                    y2[v] = _mm512_set1_ps(0.0f);
                     iters[v] = _mm512_set1_epi32(0);
                     alive_mask[v] = 0xFFFF; // all lanes start alive
                 }
@@ -147,7 +144,7 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                         if (!alive_mask[v]) continue; // skip fully dead vectors quickly
 
                         // x' = x*x - y*y + cx
-                        // y' = 2*x*y + cy  -> use fmadd for 2*x*y + cy
+                        // y' = 2*x*y + cy 
 
                         __m512 xy = _mm512_mul_ps(x[v], y[v]);            // x*y
                         __m512 new_x2 = _mm512_mul_ps(x[v], x[v]);       // x^2
@@ -155,13 +152,10 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
 
                         // compute new x and y
                         __m512 new_x = _mm512_add_ps(_mm512_sub_ps(new_x2, new_y2), cx);
-                        __m512 new_y = _mm512_fmadd_ps(_mm512_add_ps(xy, xy), _mm512_set1_ps(1.0f), _mm512_set1_ps(cy_arr[i + v]));
-                        // note: _mm512_fmadd_ps(2*xy, 1.0, cy) — here we used (xy+xy)
+                        __m512 new_y = _mm512_add_ps(_mm512_add_ps(xy, xy), _mm512_set1_ps(cy_arr[i + v]));
 
                         x[v] = new_x;
                         y[v] = new_y;
-                        x2[v] = new_x2;
-                        y2[v] = new_y2;
 
                         // compute magnitude^2 = x2 + y2 once
                         __m512 mag2 = _mm512_add_ps(new_x2, new_y2);
