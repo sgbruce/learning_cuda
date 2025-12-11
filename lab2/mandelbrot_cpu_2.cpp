@@ -86,11 +86,11 @@ void mandelbrot_cpu_vector(uint32_t img_size, uint32_t max_iters, uint32_t *out)
             uint32_t iter_count = 0;
 
             while ((uint16_t)mask > 0 && iter_count < max_iters) {
-                x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
-                y = _mm512_fmadd_ps(_mm512_add_ps(x, x), y, cy);
                 x2 = _mm512_mul_ps(x, x);
                 y2 = _mm512_mul_ps(y, y);
-                __m512 z = _mm512_add_ps(x2, y2);
+                x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
+                y = _mm512_fmadd_ps(_mm512_add_ps(x, x), y, cy);
+                
                 iters = _mm512_mask_add_epi32(iters, mask, iters, one_vec);
 
                 ++iter_count;
