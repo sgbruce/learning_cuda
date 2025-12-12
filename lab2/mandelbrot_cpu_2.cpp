@@ -379,7 +379,7 @@ void mandelbrot_cpu_vector_multicore_multithread_ilp(
     uint32_t max_iters,
     uint32_t *out) {
 
-    uint32_t num_cores = 64;
+    uint32_t num_cores = 32;
     uint32_t rows_per_thread = img_size / num_cores;
     thread_args_t *all_args = (thread_args_t*)malloc(sizeof(thread_args_t) * num_cores);
     pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t) * num_cores);
