@@ -84,7 +84,7 @@ __global__ void mandelbrot_gpu_vector_ilp(
     uint32_t max_iters,
     uint32_t *out /* pointer to GPU memory */
 ) {
-    for (uint32_t i = blockIdx.x; i < img_size; i += gridDim.x * NUM_UNROLL) {
+    for (uint32_t i = blockIdx.x * NUM_UNROLL; i < img_size; i += gridDim.x * NUM_UNROLL) {
         for (uint32_t j = threadIdx.x; j < img_size; j += blockDim.x) {
             // Get the plane coordinate X for the image pixel.
             float cx = (float(j) / float(img_size)) * window_zoom + window_x;
@@ -285,7 +285,7 @@ __global__ void mandelbrot_gpu_vector_multicore_multithread_full_ilp(
     uint32_t max_iters,
     uint32_t *out /* pointer to GPU memory */
 ) {
-    for (uint32_t i = blockIdx.x; i < img_size; i += gridDim.x * NUM_UNROLL) {
+    for (uint32_t i = blockIdx.x * NUM_UNROLL; i < img_size; i += gridDim.x * NUM_UNROLL) {
         for (uint32_t j = threadIdx.x; j < img_size; j += blockDim.x) {
             // Get the plane coordinate X for the image pixel.
             float cx = (float(j) / float(img_size)) * window_zoom + window_x;
