@@ -270,7 +270,32 @@ void mandelbrot_cpu_vector_multicore_multithread(
     uint32_t img_size,
     uint32_t max_iters,
     uint32_t *out) {
-    // TODO: Implement this function.
+
+    uint32_t num_cores = 16;
+    uint32_t rows_per_thread = img_size / num_cores;
+    thread_args_t *all_args = (thread_args_t*)malloc(sizeof(thread_args_t) * num_cores);
+    pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t) * num_cores);
+    float *cx_arr = (float*)malloc(img_size * sizeof(float));
+    for(uint32_t i = 0; i < img_size; ++i) {
+        cx_arr[i] = float(i) / float(img_size);
+    }
+    for (uint32_t i = 0; i < num_cores; i++) {
+        thread_args_t* args = &all_args[i];
+        args->img_size = img_size;
+        args->row_start = i * rows_per_thread;
+        args->row_end = (i + 1) * rows_per_thread;
+        args->max_iters = max_iters;
+        args->out = out;
+        args->cx_arr = cx_arr;
+        pthread_create(&threads[i], NULL, mandelbrot_cpu_vector_partial, (void*)args);
+    }
+
+    for (uint32_t i = 0; i < num_cores; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    free(all_args);
+    free(threads);
+    free(cx_arr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

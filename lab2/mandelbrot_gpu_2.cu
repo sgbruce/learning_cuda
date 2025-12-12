@@ -156,7 +156,31 @@ __global__ void mandelbrot_gpu_vector_multicore(
     uint32_t max_iters,
     uint32_t *out /* pointer to GPU memory */
 ) {
-    /* your (GPU) code here... */
+    for (uint32_t i = blockIdx.x; i < img_size; i+= gridDim.x) {
+        for (uint32_t j = threadIdx.x; j < img_size; j += blockDim.x) {
+            // Get the plane coordinate X for the image pixel.
+            float cx = (float(j) / float(img_size)) * window_zoom + window_x;
+            float cy = (float(i) / float(img_size)) * window_zoom + window_y;
+
+            // Innermost loop: start the recursion from z = 0.
+            float x2 = 0.0f;
+            float y2 = 0.0f;
+            float w = 0.0f;
+            uint32_t iters = 0;
+            while (x2 + y2 <= 4.0f && iters < max_iters) {
+                float x = x2 - y2 + cx;
+                float y = w - (x2 + y2) + cy;
+                x2 = x * x;
+                y2 = y * y;
+                float z = x + y;
+                w = z * z;
+                ++iters;
+            }
+
+            // Write result.
+            out[i * img_size + j] = iters;
+        }
+    }
 }
 
 void launch_mandelbrot_gpu_vector_multicore(
@@ -164,7 +188,7 @@ void launch_mandelbrot_gpu_vector_multicore(
     uint32_t max_iters,
     uint32_t *out /* pointer to GPU memory */
 ) {
-    /* your (CPU) code here... */
+    mandelbrot_gpu_vector_multicore<<<48, 128>>>(img_size, max_iters, out);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
