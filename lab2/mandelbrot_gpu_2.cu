@@ -22,34 +22,59 @@ uint32_t ceil_div(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
 
 /// <--- your code here --->
 
-/*
-    // OPTIONAL: Uncomment this block to include your GPU vector implementation
-    // from Lab 1 for easy comparison.
-    //
-    // (If you do this, you'll need to update your code to use the new constants
-    // 'window_zoom', 'window_x', and 'window_y'.)
 
-    #define HAS_VECTOR_IMPL // <~~ keep this line if you want to benchmark the vector kernel!
+// OPTIONAL: Uncomment this block to include your GPU vector implementation
+// from Lab 1 for easy comparison.
+//
+// (If you do this, you'll need to update your code to use the new constants
+// 'window_zoom', 'window_x', and 'window_y'.)
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // Vector
+#define HAS_VECTOR_IMPL // <~~ keep this line if you want to benchmark the vector kernel!
+#define NUM_UNROLL 4
 
-    __global__ void mandelbrot_gpu_vector(
-        uint32_t img_size,
-        uint32_t max_iters,
-        uint32_t *out // pointer to GPU memory
-    ) {
-        // your (GPU) code here...
+////////////////////////////////////////////////////////////////////////////////
+// Vector
+
+__global__ void mandelbrot_gpu_vector(
+    uint32_t img_size,
+    uint32_t max_iters,
+    uint32_t *out /* pointer to GPU memory */
+) {
+    for (uint32_t i = blockIdx.x; i < img_size; i += gridDim.x) {
+        for (uint32_t j = threadIdx.x; j < img_size; j += blockDim.x) {
+            // Get the plane coordinate X for the image pixel.
+            float cx = (float(j) / float(img_size)) * window_zoom + window_x;
+            float cy = (float(i) / float(img_size)) * window_zoom + window_y;
+
+            // Innermost loop: start the recursion from z = 0.
+            float x2 = 0.0f;
+            float y2 = 0.0f;
+            float w = 0.0f;
+            uint32_t iters = 0;
+            while (x2 + y2 <= 4.0f && iters < max_iters) {
+                float x = x2 - y2 + cx;
+                float y = w - x2 - y2 + cy;
+                x2 = x * x;
+                y2 = y * y;
+                float z = x + y;
+                w = z * z;
+                ++iters;
+            }
+
+            // Write result.
+            out[i * img_size + j] = iters;
+        }
     }
+}
 
-    void launch_mandelbrot_gpu_vector(
-        uint32_t img_size,
-        uint32_t max_iters,
-        uint32_t *out // pointer to GPU memory
-    ) {
-        // your (CPU) code here...
-    }
-*/
+void launch_mandelbrot_gpu_vector(
+    uint32_t img_size,
+    uint32_t max_iters,
+    uint32_t *out /* pointer to GPU memory */
+) {
+    mandelbrot_gpu_vector<<<1, 32>>>(img_size, max_iters, out);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Vector + ILP
@@ -59,7 +84,53 @@ __global__ void mandelbrot_gpu_vector_ilp(
     uint32_t max_iters,
     uint32_t *out /* pointer to GPU memory */
 ) {
-    /* your (GPU) code here... */
+    for (uint32_t i = blockIdx.x; i < img_size; i += gridDim.x * NUM_UNROLL) {
+        for (uint32_t j = threadIdx.x; j < img_size; j += blockDim.x) {
+            // Get the plane coordinate X for the image pixel.
+            float cx = (float(j) / float(img_size)) * window_zoom + window_x;
+            float cy[NUM_UNROLL];
+            for(uint32_t k = 0; k < NUM_UNROLL; k++) {
+                cy[k] = (float(i + k) / float(img_size)) * window_zoom + window_y;
+            }
+
+            // Innermost loop: start the recursion from z = 0.
+            float x2[NUM_UNROLL], y2[NUM_UNROLL], w[NUM_UNROLL], iters[NUM_UNROLL], alive[NUM_UNROLL];
+            for(uint32_t k = 0; k < NUM_UNROLL; k++) {
+                x2[k] = 0.0f;
+                y2[k] = 0.0f;
+                w[k] = 0.0f;
+                alive[k] = true;
+            }
+
+            for (uint32_t it = 0; it < max_iters; ++it) {
+                bool any_alive = false;
+                for (int v = 0; v < NUM_UNROLL; ++v) {
+                    if(!alive[v]) {
+                        continue;
+                    }
+                    float x = x2[v] - y2[v] + cx;
+                    float y = w[v] - x2[v] - y2[v] + cy[v];
+                    x2[v] = x * x;
+                    y2[v] = y * y;
+                    float z = x + y;
+                    w[v] = z * z;
+                    ++iters[v];
+                    alive[v] = x2[v] + y2[v] <= 4.0f;
+                    if(alive[v]) {
+                        any_alive = true;
+                    }
+                }
+                if(!any_alive) {
+                    break;
+                }
+            }
+
+            // Write result.
+            for(uint32_t k = 0; k < NUM_UNROLL; ++k) {
+                out[(i + k) * img_size + j] = iters[k];
+            }
+        }
+    }
 }
 
 void launch_mandelbrot_gpu_vector_ilp(
