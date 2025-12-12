@@ -252,7 +252,7 @@ void mandelbrot_cpu_vector_multicore(
         pthread_create(&threads[i], NULL, mandelbrot_cpu_vector_partial, (void*)args);
     }
 
-    for (int i = 0; i < num_cores; i++) {
+    for (uint32_t i = 0; i < num_cores; i++) {
         pthread_join(threads[i], NULL);
     }
 }
