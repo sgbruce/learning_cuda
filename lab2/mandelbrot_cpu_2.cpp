@@ -149,7 +149,6 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                     y2[v] = _mm512_mul_ps(y, y);
                     __m512 z = _mm512_add_ps(x, y);
                     w[v] = _mm512_mul_ps(z, z);
-                    iters[v] = _mm512_mask_add_epi32(iters[v], alive_mask[v], iters[v], _mm512_set1_epi32(1));
                     
 
                     // update alive mask for this vector
