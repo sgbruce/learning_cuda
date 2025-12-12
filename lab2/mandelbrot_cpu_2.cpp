@@ -182,7 +182,7 @@ typedef struct {
 } thread_args_t;
 
 void* mandelbrot_cpu_vector_partial(void* arg) {
-    thread_args_t * args = (thread_args_t*)args;
+    thread_args_t * args = (thread_args_t*)arg;
     uint32_t img_size = args->img_size; 
     uint32_t row_start = args->row_start; 
     uint32_t row_end = args->row_end;
