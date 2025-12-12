@@ -300,7 +300,7 @@ void mandelbrot_cpu_vector_multicore_multithread(
 
 ////////////////////////////////////////////////////////////////////////////////
 // Vector + Multi-core + Multi-thread-per-core + ILP
-#define NUM_UNROLL_MC 8 
+#define NUM_UNROLL_MC 4
 
 void* mandelbrot_cpu_vector_ilp_partial(void* arg) {
     thread_args_t * args = (thread_args_t*)arg;
