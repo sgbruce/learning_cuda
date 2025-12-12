@@ -255,7 +255,6 @@ void mandelbrot_cpu_vector_multicore(
     for (int i = 0; i < num_cores; i++) {
         pthread_join(threads[i], NULL);
     }
-    free(all_args);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
