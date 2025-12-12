@@ -271,7 +271,7 @@ void mandelbrot_cpu_vector_multicore_multithread(
     uint32_t max_iters,
     uint32_t *out) {
 
-    uint32_t num_cores = 16;
+    uint32_t num_cores = 32;
     uint32_t rows_per_thread = img_size / num_cores;
     thread_args_t *all_args = (thread_args_t*)malloc(sizeof(thread_args_t) * num_cores);
     pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t) * num_cores);
@@ -300,12 +300,109 @@ void mandelbrot_cpu_vector_multicore_multithread(
 
 ////////////////////////////////////////////////////////////////////////////////
 // Vector + Multi-core + Multi-thread-per-core + ILP
+#define NUM_UNROLL_MC 8 
+
+void* mandelbrot_cpu_vector_ilp_partial(void* arg) {
+    thread_args_t * args = (thread_args_t*)arg;
+    uint32_t img_size = args->img_size; 
+    uint32_t row_start = args->row_start; 
+    uint32_t row_end = args->row_end;
+    uint32_t max_iters = args->max_iters;
+    uint32_t *out = args->out;
+    float* cx_arr = args->cx_arr;
+
+    float cy_arr[img_size];
+    for(uint32_t i = 0; i < img_size; ++i) {
+        cx_arr[i] = float(i) / float(img_size);
+        cy_arr[i] = float(i) / float(img_size) * window_zoom + window_y;
+    }
+    __m512 mul_vec = _mm512_set1_ps(window_zoom);
+    __m512 add_vec = _mm512_set1_ps(window_x);
+    __m512i one_vec = _mm512_set1_epi32(1);
+    __m512 four_vec = _mm512_set1_ps(4.0f);
+
+    for (uint64_t i = row_start; i < row_end; i += NUM_UNROLL_MC) {
+        for (uint64_t j = 0; j < img_size; j += 16) {
+            // Get the plane coordinate X for the image pixel.
+            __m512 cx = _mm512_loadu_ps(&cx_arr[j]);
+            cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
+            
+            // For each independent vector (different rows), load cy from table and init x,y,x2,y2,iters,alive mask
+            __m512 x2[NUM_UNROLL_MC], y2[NUM_UNROLL_MC], w[NUM_UNROLL_MC];
+            __m512i iters[NUM_UNROLL_MC];
+            __mmask16 alive_mask[NUM_UNROLL_MC];
+
+            for (int v = 0; v < NUM_UNROLL_MC; ++v) {
+                x2[v] = _mm512_set1_ps(0.0f);
+                y2[v] = _mm512_set1_ps(0.0f);
+                w[v] = _mm512_set1_ps(0.0f);
+                iters[v] = _mm512_set1_epi32(0);
+                alive_mask[v] = 0xFFFF; // all lanes start alive
+            }
+
+            // Fixed-iteration loop so control flow is predictable
+            for (uint32_t it = 0; it < max_iters; ++it) {
+                bool any_alive = false;
+                for (int v = 0; v < NUM_UNROLL_MC; ++v) {
+                    if (!alive_mask[v]) continue; // skip fully dead vectors quickly
+
+                    __m512 x = _mm512_add_ps(_mm512_sub_ps(x2[v], y2[v]), cx);
+                    __m512 y =_mm512_add_ps(_mm512_sub_ps(w[v], _mm512_add_ps(x2[v], y2[v])), _mm512_set1_ps(cy_arr[i + v]));
+                    x2[v] = _mm512_mul_ps(x, x);
+                    y2[v] = _mm512_mul_ps(y, y);
+                    __m512 z = _mm512_add_ps(x, y);
+                    w[v] = _mm512_mul_ps(z, z);
+                    iters[v] = _mm512_mask_add_epi32(iters[v], alive_mask[v], iters[v], _mm512_set1_epi32(1));
+                    
+
+                    // update alive mask for this vector
+                    __mmask16 still_alive = _mm512_cmp_ps_mask(_mm512_add_ps(x2[v], y2[v]), four_vec, _CMP_LE_OQ);
+                    alive_mask[v] = still_alive;
+
+                    if (still_alive) any_alive = true;
+                }
+                if (!any_alive) break; // early out if no lane in any vector needs more iterations
+            } // end iter loop
+
+            // store results for each v into output (store 16 ints per vector)
+            for (int v = 0; v < NUM_UNROLL_MC; ++v) {
+                // convert iters[v] (vec of 16 int32) into memory
+                _mm512_storeu_si512((void*)(&out[(i+v)*img_size + j]), iters[v]);
+            }
+        }
+    }
+}
 
 void mandelbrot_cpu_vector_multicore_multithread_ilp(
     uint32_t img_size,
     uint32_t max_iters,
     uint32_t *out) {
-    // TODO: Implement this function.
+        
+    uint32_t num_cores = 32;
+    uint32_t rows_per_thread = img_size / num_cores;
+    thread_args_t *all_args = (thread_args_t*)malloc(sizeof(thread_args_t) * num_cores);
+    pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t) * num_cores);
+    float *cx_arr = (float*)malloc(img_size * sizeof(float));
+    for(uint32_t i = 0; i < img_size; ++i) {
+        cx_arr[i] = float(i) / float(img_size);
+    }
+    for (uint32_t i = 0; i < num_cores; i++) {
+        thread_args_t* args = &all_args[i];
+        args->img_size = img_size;
+        args->row_start = i * rows_per_thread;
+        args->row_end = (i + 1) * rows_per_thread;
+        args->max_iters = max_iters;
+        args->out = out;
+        args->cx_arr = cx_arr;
+        pthread_create(&threads[i], NULL, mandelbrot_cpu_vector_partial, (void*)args);
+    }
+
+    for (uint32_t i = 0; i < num_cores; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    free(all_args);
+    free(threads);
+    free(cx_arr);
 }
 
 /// <--- /your code here --->
