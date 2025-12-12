@@ -173,11 +173,87 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
 ////////////////////////////////////////////////////////////////////////////////
 // Vector + Multi-core
 
+typedef struct {
+    uint32_t img_size; 
+    uint32_t row_start; 
+    uint32_t row_end;
+    uint32_t max_iters;
+    uint32_t *out;
+} thread_args_t;
+
+void* mandelbrot_cpu_vector_partial(void* arg) {
+    thread_args_t * args = (thread_args_t*)args;
+    uint32_t img_size = args->img_size; 
+    uint32_t row_start = args->row_start; 
+    uint32_t row_end = args->row_end;
+    uint32_t max_iters = args->max_iters;
+    uint32_t *out = args->out;
+
+    float cx_arr[img_size];
+    for(uint32_t i = 0; i < img_size; ++i) {
+        cx_arr[i] = float(i) / float(img_size);
+    }
+    __m512 mul_vec = _mm512_set1_ps(window_zoom);
+    __m512 add_vec = _mm512_set1_ps(window_x);
+    __m512i one_vec = _mm512_set1_epi32(1);
+    __m512 four_vec = _mm512_set1_ps(4.0f);
+
+    for (uint64_t i = row_start; i < row_end; ++i) {
+        __m512 cy = _mm512_set1_ps((float(i) / float(img_size)) * window_zoom + window_y);
+        for (uint64_t j = 0; j < img_size; j += 16) {
+            // Get the plane coordinate X for the image pixel.
+            __m512 cx = _mm512_loadu_ps(&cx_arr[j]);
+            cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
+
+            // Innermost loop: start the recursion from z = 0.
+            __m512 x2 = _mm512_set1_ps(0.0f);
+            __m512 y2 = _mm512_set1_ps(0.0f);
+            __m512 w = _mm512_set1_ps(0.0f);
+            __mmask16 mask = 0xFFFF;
+            __m512i iters = _mm512_set1_epi32(0);
+            uint32_t iter_count = 0;
+
+            while ((uint16_t)mask > 0 && iter_count < max_iters) {
+                __m512 x = _mm512_add_ps(_mm512_sub_ps(x2, y2), cx);
+                __m512 y =_mm512_add_ps(_mm512_sub_ps(w, _mm512_add_ps(x2, y2)), cy);
+                x2 = _mm512_mul_ps(x, x);
+                y2 = _mm512_mul_ps(y, y);
+                __m512 z = _mm512_add_ps(x, y);
+                w = _mm512_mul_ps(z, z);
+                iters = _mm512_mask_add_epi32(iters, mask, iters, _mm512_set1_epi32(1));
+
+                ++iter_count;
+                mask = _mm512_cmp_ps_mask(_mm512_add_ps(x2, y2), _mm512_set1_ps(4.0f), _CMP_LE_OQ);
+            }
+
+            // Write result.
+            _mm512_storeu_si512(&out[i * img_size + j], iters);
+        }
+    }
+
+    free(args);
+}
+
 void mandelbrot_cpu_vector_multicore(
     uint32_t img_size,
     uint32_t max_iters,
     uint32_t *out) {
-    // TODO: Implement this function.
+    
+    uint32_t num_cores = 8;
+    pthread_t threads[num_cores];
+    for (uint32_t i = 0; i < num_cores; i++) {
+        thread_args_t* args = (thread_args_t*)malloc(sizeof(thread_args_t));
+        args->img_size = img_size;
+        args->row_start = i / num_cores * img_size;
+        args->row_end = (i + 1) / num_cores * img_size;
+        args->max_iters = max_iters;
+        args->out = out;
+        pthread_create(&threads[i], NULL, mandelbrot_cpu_vector_partial, (void*)args);
+    }
+
+    for (int i = 0; i < num_cores; i++) {
+        pthread_join(threads[i], NULL);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
