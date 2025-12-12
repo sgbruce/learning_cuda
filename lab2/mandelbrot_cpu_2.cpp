@@ -228,6 +228,7 @@ void* mandelbrot_cpu_vector_partial(void* arg) {
             _mm512_storeu_si512(&out[i * img_size + j], iters);
         }
     }
+    return NULL;
 }
 
 void mandelbrot_cpu_vector_multicore(
@@ -237,9 +238,9 @@ void mandelbrot_cpu_vector_multicore(
     
     uint32_t num_cores = 8;
     uint32_t rows_per_thread = img_size / num_cores;
-    thread_args_t all_args[num_cores];
-    pthread_t threads[num_cores];
-    float cx_arr[img_size];
+    thread_args_t *all_args = (thread_args_t*)malloc(sizeof(thread_args_t) * num_cores);
+    pthread_t *threads = (pthread_t*)malloc(sizeof(pthread_t) * num_cores);
+    float *cx_arr = (float*)malloc(img_size * sizeof(float));
     for(uint32_t i = 0; i < img_size; ++i) {
         cx_arr[i] = float(i) / float(img_size);
     }
@@ -257,6 +258,9 @@ void mandelbrot_cpu_vector_multicore(
     for (uint32_t i = 0; i < num_cores; i++) {
         pthread_join(threads[i], NULL);
     }
+    free(all_args);
+    free(threads);
+    free(cx_arr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
