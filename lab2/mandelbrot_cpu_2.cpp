@@ -54,7 +54,7 @@ uint32_t ceil_div(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
 // 'window_zoom', 'window_x', and 'window_y'.)
 
 #define HAS_VECTOR_IMPL // <~~ keep this line if you want to benchmark the vector kernel!
-#define NUM_UNROLL 1
+#define NUM_UNROLL 8
 
 ////////////////////////////////////////////////////////////////////////////////
 // Vector
@@ -125,13 +125,14 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
             cx = _mm512_add_ps(_mm512_mul_ps(cx, mul_vec), add_vec);
             
             // For each independent vector (different rows), load cy from table and init x,y,x2,y2,iters,alive mask
-            __m512 x[NUM_UNROLL], y[NUM_UNROLL];
+            __m512 x2[NUM_UNROLL], y2[NUM_UNROLL], w[NUM_UNROLL];
             __m512i iters[NUM_UNROLL];
             __mmask16 alive_mask[NUM_UNROLL];
 
             for (int v = 0; v < NUM_UNROLL; ++v) {
-                x[v] = _mm512_set1_ps(0.0f);
-                y[v] = _mm512_set1_ps(0.0f);
+                x2[v] = _mm512_set1_ps(0.0f);
+                y2[v] = _mm512_set1_ps(0.0f);
+                w[v] = _mm512_set1_ps(0.0f);
                 iters[v] = _mm512_set1_epi32(0);
                 alive_mask[v] = 0xFFFF; // all lanes start alive
             }
@@ -142,29 +143,17 @@ void mandelbrot_cpu_vector_ilp(uint32_t img_size, uint32_t max_iters, uint32_t *
                 for (int v = 0; v < NUM_UNROLL; ++v) {
                     if (!alive_mask[v]) continue; // skip fully dead vectors quickly
 
-                    // x' = x*x - y*y + cx
-                    // y' = 2*x*y + cy 
-
-                    __m512 xy = _mm512_mul_ps(x[v], y[v]);            // x*y
-                    __m512 old_x2 = _mm512_mul_ps(x[v], x[v]);       // x^2
-                    __m512 old_y2 = _mm512_mul_ps(y[v], y[v]);       // y^2
-
-                    // compute new x and y
-                    __m512 new_x = _mm512_add_ps(_mm512_sub_ps(old_x2, old_y2), cx);
-                    __m512 new_y = _mm512_add_ps(_mm512_add_ps(xy, xy), _mm512_set1_ps(cy_arr[i + v]));
-
-                    x[v] = new_x;
-                    y[v] = new_y;
-
-                    __m512 new_x2 = _mm512_mul_ps(new_x, new_x);
-                    __m512 new_y2 = _mm512_mul_ps(new_y, new_y);
-                    __m512 mag2 = _mm512_add_ps(new_x2, new_y2);
-
-                    // increment iters only on active lanes
-                    iters[v] = _mm512_mask_add_epi32(iters[v], alive_mask[v], iters[v], one_vec);
+                    __m512 x = _mm512_add_ps(_mm512_sub_ps(x2[v], y2[v]), cx);
+                    __m512 y =_mm512_add_ps(_mm512_sub_ps(w[v], _mm512_add_ps(x2[v], y2[v])), _mm512_set1_ps(cy_arr[i + v]));
+                    x2[v] = _mm512_mul_ps(x, x);
+                    y2[v] = _mm512_mul_ps(y, y);
+                    __m512 z = _mm512_add_ps(x, y);
+                    w[v] = _mm512_mul_ps(z, z);
+                    iters[v] = _mm512_mask_add_epi32(iters[v], alive_mask[v], iters[v], _mm512_set1_epi32(1));
+                    
 
                     // update alive mask for this vector
-                    __mmask16 still_alive = _mm512_cmp_ps_mask(mag2, four_vec, _CMP_LE_OQ);
+                    __mmask16 still_alive = _mm512_cmp_ps_mask(_mm512_add_ps(x2[v], y2[v]), four_vec, _CMP_LE_OQ);
                     alive_mask[v] = still_alive;
 
                     if (still_alive) any_alive = true;
