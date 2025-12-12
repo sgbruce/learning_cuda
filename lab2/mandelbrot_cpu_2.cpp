@@ -240,9 +240,10 @@ void mandelbrot_cpu_vector_multicore(
     uint32_t *out) {
     
     uint32_t num_cores = 8;
+    thread_args_t all_args[num_cores];
     pthread_t threads[num_cores];
     for (uint32_t i = 0; i < num_cores; i++) {
-        thread_args_t* args = (thread_args_t*)malloc(sizeof(thread_args_t));
+        thread_args_t* args = &all_args[i];
         args->img_size = img_size;
         args->row_start = i / num_cores * img_size;
         args->row_end = (i + 1) / num_cores * img_size;
@@ -254,6 +255,7 @@ void mandelbrot_cpu_vector_multicore(
     for (int i = 0; i < num_cores; i++) {
         pthread_join(threads[i], NULL);
     }
+    free(all_args);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
