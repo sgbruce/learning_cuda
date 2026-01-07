@@ -216,8 +216,11 @@ __global__ void wave_gpu_shmem_multistep(
     constexpr float dx = Scene::dx;
     constexpr float dt = Scene::dt;
 
-    int32_t block_y_start = (n_cells_y * blockIdx.x) / gridDim.x;
-    int32_t block_y_end   = (n_cells_y * (blockIdx.x + 1)) / gridDim.x;
+    extern __shared__ float shared[];
+
+    int32_t offset = steps - 1;
+    int32_t block_y_start = (n_cells_y * blockIdx.x) / gridDim.x - offset;
+    int32_t block_y_end   = (n_cells_y * (blockIdx.x + 1)) / gridDim.x + offset;
 
     int32_t block_y_size = block_y_end - block_y_start;
 
@@ -225,35 +228,39 @@ __global__ void wave_gpu_shmem_multistep(
 
     int32_t y_end = block_y_start + (block_y_size * (threadIdx.z + 1)) / blockDim.z;
 
-    int32_t x_start = (n_cells_x * threadIdx.y) / blockDim.y + threadIdx.x;
-    int32_t x_end   = (n_cells_x * (threadIdx.y + 1)) / blockDim.y;
+    int32_t x_start = (n_cells_x * threadIdx.y) / blockDim.y + threadIdx.x - offset;
+    int32_t x_end   = (n_cells_x * (threadIdx.y + 1)) / blockDim.y + offset;
 
-    for (int32_t idx_y = y_start; idx_y < min((int32_t)y_end, n_cells_y); ++idx_y) {
-        for (int32_t idx_x = x_start; idx_x < min((int32_t)x_end, n_cells_x); idx_x += blockDim.x) {
-            int32_t idx = idx_y * n_cells_x + idx_x;
-            if (idx >= n_cells_y * n_cells_x) {
-                printf("out of bounds!, %d, %d, %d, %d", n_cells_y, n_cells_x, idx_y, idx_x);
+    for (int32_t n = 0; n < steps; ++n) {
+        for (int32_t idx_y = max(0, y_start + n); idx_y < min((int32_t)y_end - n, n_cells_y); ++idx_y) {
+            for (int32_t idx_x = max(0, x_start + n); idx_x < min((int32_t)x_end - n, n_cells_x); idx_x += blockDim.x) {
+                int32_t idx = idx_y * n_cells_x + idx_x;
+                if (idx >= n_cells_y * n_cells_x) {
+                    printf("out of bounds!, %d, %d, %d, %d", n_cells_y, n_cells_x, idx_y, idx_x);
+                }
+                bool is_border =
+                    (idx_x == 0 || idx_x == n_cells_x - 1 || idx_y == 0 ||
+                    idx_y == n_cells_y - 1);
+                float u_next_val;
+                if (is_border || Scene::is_wall(idx_x, idx_y)) {
+                    u_next_val = 0.0f;
+                } else if (Scene::is_source(idx_x, idx_y)) {
+                    u_next_val = Scene::source_value(idx_x, idx_y, t);
+                } else {
+                    constexpr float coeff = c * c * dt * dt / (dx * dx);
+                    float damping = Scene::damping(idx_x, idx_y);
+                    u_next_val =
+                        ((2.0f - damping - 4.0f * coeff) * u1[idx] -
+                        (1.0f - damping) * u0[idx] +
+                        coeff *
+                            (u1[idx - 1] + u1[idx + 1] + u1[idx - n_cells_x] +
+                            u1[idx + n_cells_x]));
+                }
+                u0[idx] = u_next_val;
             }
-            bool is_border =
-                (idx_x == 0 || idx_x == n_cells_x - 1 || idx_y == 0 ||
-                 idx_y == n_cells_y - 1);
-            float u_next_val;
-            if (is_border || Scene::is_wall(idx_x, idx_y)) {
-                u_next_val = 0.0f;
-            } else if (Scene::is_source(idx_x, idx_y)) {
-                u_next_val = Scene::source_value(idx_x, idx_y, t);
-            } else {
-                constexpr float coeff = c * c * dt * dt / (dx * dx);
-                float damping = Scene::damping(idx_x, idx_y);
-                u_next_val =
-                    ((2.0f - damping - 4.0f * coeff) * u1[idx] -
-                     (1.0f - damping) * u0[idx] +
-                     coeff *
-                         (u1[idx - 1] + u1[idx + 1] + u1[idx - n_cells_x] +
-                          u1[idx + n_cells_x]));
-            }
-            u0[idx] = u_next_val;
         }
+        __syncthreads(); // next steps: use the scratchpad memory to hold the expanded working area of the block, where shared[0] is u[idx], only modify u[0] at the last
+        // step for the valid working area
     }
 }
 
@@ -291,9 +298,9 @@ std::pair<float *, float *> wave_gpu_shmem(
     float *extra1  /* pointer to GPU memory */
 ) {
     for (int32_t idx_step = 0; idx_step < n_steps; idx_step++) {
-        // float t = t0 + idx_step * Scene::dt;
-        // wave_gpu_shmem_multistep<Scene><<<dim3(48,1,1),dim3(32,4,8)>>>(t, u0, u1, extra0, extra1, 1);
-        // std::swap(u0, u1);
+        float t = t0 + idx_step * Scene::dt;
+        wave_gpu_shmem_multistep<Scene><<<dim3(48,1,1),dim3(32,4,8), 16000>>>(t, u0, u1, extra0, extra1, 2);
+        std::swap(u0, u1);
     }
     return {u0, u1};
 }
